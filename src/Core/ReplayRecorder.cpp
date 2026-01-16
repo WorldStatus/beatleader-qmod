@@ -199,30 +199,47 @@ namespace ReplayRecorder {
         }
     }
 
-    void processResults(LevelCompletionResults* levelCompletionResults, bool skipUpload) {
-        replay->info.score = levelCompletionResults->multipliedScore;
+void processResults(LevelCompletionResults* levelCompletionResults, bool /*skipUpload*/) {
+    replay->info.score = levelCompletionResults->multipliedScore;
 
-        mapEnhancer.energy = levelCompletionResults->energy;
-        mapEnhancer.Enhance(replay.value());
+    mapEnhancer.energy = levelCompletionResults->energy;
+    mapEnhancer.Enhance(replay.value());
 
-        auto playEndData = PlayEndData(levelCompletionResults, replay->info.speed);
+    auto playEndData = PlayEndData(levelCompletionResults, replay->info.speed);
 
-        if (playEndData.GetEndType() == LevelEndType::Fail) {
-            replay->info.failTime = audioTimeSyncController->songTime;
-        }
-        
-        replayCallback(*replay, playEndData, skipUpload);
+
+    if (playEndData.GetEndType() != LevelEndType::Clear) {
         replay = nullopt;
+        return;
     }
 
-    MAKE_HOOK_MATCH(ProcessResultsSolo, &StandardLevelScenesTransitionSetupDataSO::Finish, void, StandardLevelScenesTransitionSetupDataSO* self, LevelCompletionResults* levelCompletionResults) {
-        ProcessResultsSolo(self, levelCompletionResults);
-        recording = false;
-        if (replay != nullopt) {
-            collectMapData(self);
-            processResults(levelCompletionResults, self->gameMode == "Party");
-        }
+    replayCallback(*replay, playEndData, false);
+    replay = nullopt;
+}
+
+
+MAKE_HOOK_MATCH(
+    ProcessResultsSolo,
+    &StandardLevelScenesTransitionSetupDataSO::Finish,
+    void,
+    StandardLevelScenesTransitionSetupDataSO* self,
+    LevelCompletionResults* levelCompletionResults
+) {
+    ProcessResultsSolo(self, levelCompletionResults);
+    recording = false;
+
+    if (replay == nullopt) return;
+
+    
+    if (self->gameMode == "Party" || self->practiceSettings != nullptr) {
+        replay = nullopt;
+        return;
     }
+
+    collectMapData(self);
+    processResults(levelCompletionResults, false);
+}
+
 
     void processMultiplayerResults(MultiplayerResultsData* levelCompletionResults) {
         auto results = levelCompletionResults->localPlayerResultData->multiplayerLevelCompletionResults;
